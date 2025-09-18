@@ -48,6 +48,8 @@ const exportButton = document.getElementById('exportButton');
 const zoomInButton = document.getElementById('zoomInButton');
 const zoomOutButton = document.getElementById('zoomOutButton');
 let currentCommuneData = null; // Pour stocker les données de la commune actuelle
+let irisCache = new Map(); // Cache pour les données IRIS déjà chargées
+let visibleIrisLayers = new Map(); // Couches IRIS actuellement visibles
 
 // Palette de couleurs pour les grands quartiers
 const grandQuartierColors = [
@@ -329,6 +331,217 @@ function unhighlightAll() {
             });
         }
     });
+}
+
+// Fonction de lazy loading pour les IRIS
+async function loadIrisLazy(depCode, communeCode, communeName) {
+    const cacheKey = `${depCode}-${communeCode}`;
+    
+    // Vérifier le cache d'abord
+    if (irisCache.has(cacheKey)) {
+        console.log(`📦 IRIS trouvés dans le cache pour ${communeName}`);
+        return irisCache.get(cacheKey);
+    }
+    
+    // Afficher l'indicateur de chargement
+    loadingDiv.style.display = 'block';
+    loadingDiv.innerHTML = `
+        <div class="flex items-center space-x-3 text-indigo-600">
+            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+            <div>
+                <div class="font-medium">🚀 Chargement lazy des IRIS</div>
+                <div class="text-sm text-gray-500">Commune: ${communeName}</div>
+                <div class="text-xs text-gray-400">Optimisation en cours...</div>
+            </div>
+        </div>
+    `;
+    
+    try {
+        const response = await fetch(`data/iris_par_departement/iris_${depCode}.geojson`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const irisData = await response.json();
+        const irisFeatures = irisData.features.filter(f => f.properties.code_insee === communeCode);
+        
+        if (irisFeatures.length === 0) {
+            throw new Error('Aucune donnée IRIS pour cette commune');
+        }
+        
+        // Mettre en cache pour les prochaines fois
+        irisCache.set(cacheKey, {
+            features: irisFeatures,
+            timestamp: Date.now()
+        });
+        
+        console.log(`✅ IRIS chargés et mis en cache pour ${communeName}: ${irisFeatures.length} éléments`);
+        loadingDiv.style.display = 'none';
+        
+        return { features: irisFeatures, timestamp: Date.now() };
+        
+    } catch (error) {
+        loadingDiv.innerHTML = `
+            <div class="flex items-center space-x-3 text-red-600">
+                <div class="rounded-full h-5 w-5 bg-red-600 flex items-center justify-center">
+                    <svg class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </div>
+                <div>
+                    <div class="font-medium">Erreur chargement IRIS</div>
+                    <div class="text-sm text-gray-500">${error.message}</div>
+                </div>
+            </div>
+        `;
+        throw error;
+    }
+}
+
+// Fonction pour charger progressivement les IRIS visibles
+function renderIrisProgressively(irisFeatures, grandQuartiersMap, communeName) {
+    if (currentLayer) map.removeLayer(currentLayer);
+    irisMarkers.forEach(marker => map.removeLayer(marker));
+    irisMarkers = [];
+    
+    // Créer un groupe de couches pour un meilleur contrôle
+    const irisGroup = L.layerGroup();
+    
+    // Calculer les bounds pour déterminer la priorité de chargement
+    const mapBounds = map.getBounds();
+    
+    // Trier les IRIS par priorité (ceux dans la vue actuelle d'abord)
+    const sortedIris = irisFeatures.sort((a, b) => {
+        const aBounds = L.geoJSON(a).getBounds();
+        const bBounds = L.geoJSON(b).getBounds();
+        const aInView = mapBounds.intersects(aBounds) ? 0 : 1;
+        const bInView = mapBounds.intersects(bBounds) ? 0 : 1;
+        return aInView - bInView;
+    });
+    
+    // Indicateur de progression
+    let loaded = 0;
+    const total = sortedIris.length;
+    
+    function updateProgress() {
+        loaded++;
+        const progress = Math.round((loaded / total) * 100);
+        if (loaded < total) {
+            loadingDiv.innerHTML = `
+                <div class="space-y-2">
+                    <div class="flex items-center space-x-3 text-indigo-600">
+                        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                        <div class="text-sm">
+                            <span class="font-medium">Rendu IRIS: ${loaded}/${total}</span>
+                            <span class="text-gray-500 ml-2">(${progress}%)</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-1.5">
+                        <div class="bg-indigo-600 h-1.5 rounded-full transition-all duration-200" style="width: ${progress}%"></div>
+                    </div>
+                </div>
+            `;
+        } else {
+            loadingDiv.style.display = 'none';
+        }
+    }
+    
+    // Charger les IRIS par petits groupes (chunking)
+    const chunkSize = 10;
+    let currentChunk = 0;
+    
+    function processNextChunk() {
+        const start = currentChunk * chunkSize;
+        const end = Math.min(start + chunkSize, sortedIris.length);
+        const chunk = sortedIris.slice(start, end);
+        
+        chunk.forEach(feature => {
+            const gq = feature.properties.grand_quartier;
+            let style;
+            
+            if (gq && grandQuartiersMap.has(gq)) {
+                style = {
+                    color: grandQuartiersMap.get(gq).color,
+                    weight: 2,
+                    fillOpacity: 0.5
+                };
+            } else {
+                style = {
+                    color: '#9CA3AF',
+                    fillColor: '#E5E7EB',
+                    weight: 1,
+                    fillOpacity: 0.6
+                };
+            }
+            
+            const layer = L.geoJSON(feature, {
+                style: style,
+                onEachFeature: (feature, layer) => {
+                    layer.bindPopup(getPopupContent(feature, 'iris'), {
+                        className: 'custom-popup'
+                    });
+                    layer.bindTooltip(getTooltipContent(feature, 'iris'), {
+                        direction: 'top',
+                        offset: [0, -10],
+                        className: 'custom-tooltip'
+                    });
+                    layer.on('mouseover', () => {
+                        layer.setStyle({
+                            fillOpacity: 0.8,
+                            weight: 3
+                        });
+                    });
+                    layer.on('mouseout', () => {
+                        const gq = feature.properties.grand_quartier;
+                        if (gq && grandQuartiersMap.has(gq)) {
+                            layer.setStyle({
+                                color: grandQuartiersMap.get(gq).color,
+                                weight: 2,
+                                fillOpacity: 0.5
+                            });
+                        } else {
+                            layer.setStyle({
+                                color: '#9CA3AF',
+                                fillColor: '#E5E7EB',
+                                weight: 1,
+                                fillOpacity: 0.6
+                            });
+                        }
+                    });
+                }
+            });
+            
+            irisGroup.addLayer(layer);
+            updateProgress();
+        });
+        
+        // Ajouter les labels pour ce chunk
+        chunk.forEach(feature => {
+            if (feature.geometry) {
+                const coords = calculateOptimalLabelPosition(feature);
+                if (coords) {
+                    const marker = L.marker(coords, {
+                        icon: L.divIcon({
+                            className: 'iris-label',
+                            html: `<div class="text-sm font-bold text-black bg-white rounded px-1 py-0.5 shadow">${feature.properties.code_iris ? feature.properties.code_iris.slice(-4) : 'N/A'}</div>`
+                        })
+                    });
+                    irisMarkers.push(marker);
+                    marker.addTo(map);
+                }
+            }
+        });
+        
+        currentChunk++;
+        
+        // Continuer avec le prochain chunk
+        if (currentChunk * chunkSize < sortedIris.length) {
+            setTimeout(processNextChunk, 50); // Pause de 50ms entre chaque chunk
+        }
+    }
+    
+    // Démarrer le processus
+    currentLayer = irisGroup;
+    irisGroup.addTo(map);
+    processNextChunk();
 }
 
 // Fonction pour calculer la position optimale des labels d'IRIS
@@ -779,33 +992,11 @@ function drillDown(feature, level) {
     } else if (level === 'communes') {
         const communeCode = feature.properties.code;
         const depCode = communeCode.slice(0, 2);
+        const communeName = feature.properties.nom;
         
-        // Afficher un indicateur de chargement spécifique pour les IRIS
-        loadingDiv.style.display = 'block';
-        loadingDiv.innerHTML = `
-            <div class="flex items-center space-x-3 text-indigo-600">
-                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
-                <div>
-                    <div class="font-medium">🗺️ Chargement des IRIS</div>
-                    <div class="text-sm text-gray-500">Commune: ${feature.properties.nom}</div>
-                    <div class="text-xs text-gray-400">Analyse des grands quartiers...</div>
-                </div>
-            </div>
-        `;
-        
-        fetch(`data/iris_par_departement/iris_${depCode}.geojson`)
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.json();
-            })
-            .then(irisData => {
-                loadingDiv.style.display = 'none';
-                const irisFeatures = irisData.features.filter(f => f.properties.code_insee === communeCode);
-                if (irisFeatures.length === 0) {
-                    alert('Aucune donnée IRIS pour cette commune.');
-                    return;
-                }
-                
+        // Utiliser le système de lazy loading
+        loadIrisLazy(depCode, communeCode, communeName)
+            .then(({ features: irisFeatures }) => {
                 // Créer la map des grands quartiers avec couleurs
                 // D'abord, compter les IRIS par grand quartier
                 const irisCountByGQ = new Map();
@@ -834,97 +1025,42 @@ function drillDown(feature, level) {
                 
                 // Mettre à jour currentCommuneData
                 currentCommuneData = {
-                    name: feature.properties.nom,
+                    name: communeName,
                     code: communeCode,
                     irisFeatures: irisFeatures,
                     grandQuartiersMap: grandQuartiersMap
                 };
                 
-                if (currentLayer) map.removeLayer(currentLayer);
-                irisMarkers.forEach(marker => map.removeLayer(marker));
-                irisMarkers = [];
+                // Utiliser le rendu progressif au lieu du rendu traditionnel
+                renderIrisProgressively(irisFeatures, grandQuartiersMap, communeName);
                 
-                currentLayer = L.geoJSON(irisFeatures, {
-                    style: feature => {
-                        const gq = feature.properties.grand_quartier;
-                        if (gq && grandQuartiersMap.has(gq)) {
-                            // IRIS dans un grand quartier valide (≥2 IRIS)
-                            return {
-                                color: grandQuartiersMap.get(gq).color,
-                                weight: 2,
-                                fillOpacity: 0.5
-                            };
-                        } else {
-                            // IRIS isolé (pas de GQ ou GQ avec <2 IRIS) - affiché en gris
-                            return {
-                                color: '#9CA3AF',
-                                fillColor: '#E5E7EB',
-                                weight: 1,
-                                fillOpacity: 0.6
-                            };
-                        }
-                    },
-                    onEachFeature: (feature, layer) => {
-                        layer.bindPopup(getPopupContent(feature, 'iris'), {
-                            className: 'custom-popup'
-                        });
-                        layer.bindTooltip(getTooltipContent(feature, 'iris'), {
-                            direction: 'top',
-                            offset: [0, -10],
-                            className: 'custom-tooltip'
-                        });
-                        layer.on('mouseover', () => {
-                            layer.setStyle({
-                                fillOpacity: 0.8,
-                                weight: 3
-                            });
-                        });
-                        layer.on('mouseout', () => {
-                            const gq = feature.properties.grand_quartier;
-                            if (gq && grandQuartiersMap.has(gq)) {
-                                layer.setStyle({
-                                    color: grandQuartiersMap.get(gq).color,
-                                    weight: 2,
-                                    fillOpacity: 0.5
-                                });
-                            } else {
-                                layer.setStyle({
-                                    color: '#9CA3AF',
-                                    fillColor: '#E5E7EB',
-                                    weight: 1,
-                                    fillOpacity: 0.6
-                                });
-                            }
-                        });
+                // Ajuster la vue et mettre à jour l'interface
+                setTimeout(() => {
+                    if (currentLayer && currentLayer.getBounds) {
+                        map.fitBounds(currentLayer.getBounds(), { padding: [20, 20] });
                     }
-                }).addTo(map);
-                
-                // Ajouter les labels pour les numéros d'IRIS
-                irisFeatures.forEach(feature => {
-                    if (feature.geometry) {
-                        const coords = calculateOptimalLabelPosition(feature);
-                        if (coords) {
-                            const marker = L.marker(coords, {
-                                icon: L.divIcon({
-                                    className: 'iris-label',
-                                    html: `<div class="text-sm font-bold text-black bg-white rounded px-1 py-0.5 shadow">${feature.properties.code_iris ? feature.properties.code_iris.slice(-4) : 'N/A'}</div>`
-                                })
-                            }).addTo(map);
-                            irisMarkers.push(marker);
-                        }
-                    }
-                });
-                
-                map.fitBounds(currentLayer.getBounds(), { padding: [20, 20] });
-                currentLevel = 'iris';
-                infoDiv.innerHTML = generateGrandQuartierLegend(grandQuartiersMap, irisFeatures, feature.properties.nom);
-                history.push({ level: 'iris', filterCode: communeCode, bounds: map.getBounds() });
-                updateBackButton();
-                exportButton.classList.remove('hidden');
+                    currentLevel = 'iris';
+                    infoDiv.innerHTML = generateGrandQuartierLegend(grandQuartiersMap, irisFeatures, communeName);
+                    history.push({ level: 'iris', filterCode: communeCode, bounds: map.getBounds() });
+                    updateBackButton();
+                    exportButton.classList.remove('hidden');
+                }, 100);
             })
             .catch(err => {
-                console.error('Erreur chargement IRIS :', err);
-                alert('Erreur lors du chargement des données IRIS.');
+                console.error('Erreur chargement IRIS lazy :', err);
+                loadingDiv.innerHTML = `
+                    <div class="flex items-center space-x-3 text-red-600">
+                        <div class="rounded-full h-5 w-5 bg-red-600 flex items-center justify-center">
+                            <svg class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="font-medium">Erreur chargement IRIS</div>
+                            <div class="text-sm text-gray-500">Veuillez réessayer</div>
+                        </div>
+                    </div>
+                `;
             });
     }
 }
@@ -961,6 +1097,8 @@ function resetMap() {
     // Retirer les marqueurs d'IRIS
     irisMarkers.forEach(marker => map.removeLayer(marker));
     irisMarkers = [];
+    // Nettoyer le cache si nécessaire (optionnel)
+    // irisCache.clear();
     showLevel('departements');
     exportButton.classList.add('hidden');
     currentCommuneData = null;
