@@ -623,8 +623,9 @@ function goBack() {
 }
 
 function resetMap() {
-    history = [];
-    showLevel('departements');
+    console.log('🔄 Rechargement complet de la page...');
+    // Recharger complètement la page pour éviter tous les problèmes d'état
+    window.location.reload();
 }
 
 function updateBackButton() {
@@ -685,136 +686,115 @@ function toggleBackground() {
     }
     
     if (!backgroundHidden) {
-        // Masquer le fond de carte
+        // Masquer le fond de carte et mettre un fond blanc
         osmLayer.setOpacity(0);
+        document.getElementById('map').style.backgroundColor = '#ffffff';
         toggleBackgroundButton.textContent = 'Afficher Fond';
         toggleBackgroundButton.className = toggleBackgroundButton.className.replace('bg-indigo-600', 'bg-amber-600').replace('hover:bg-indigo-700', 'hover:bg-amber-700');
         backgroundHidden = true;
-        console.log('🗺️ Fond de carte masqué');
+        console.log('🗺️ Fond de carte masqué - Fond blanc activé');
     } else {
-        // Afficher le fond de carte
+        // Afficher le fond de carte et enlever le fond blanc
         osmLayer.setOpacity(0.4);
+        document.getElementById('map').style.backgroundColor = '';
         toggleBackgroundButton.textContent = 'Masquer Fond';
         toggleBackgroundButton.className = toggleBackgroundButton.className.replace('bg-amber-600', 'bg-indigo-600').replace('hover:bg-amber-700', 'hover:bg-indigo-700');
         backgroundHidden = false;
-        console.log('🗺️ Fond de carte affiché');
+        console.log('🗺️ Fond de carte affiché - Fond blanc désactivé');
     }
 }
 
 toggleBackgroundButton.addEventListener('click', toggleBackground);
 
-// ==================== MODE PLEIN ÉCRAN CORRIGÉ ====================
+// ==================== MODE PLEIN ÉCRAN ULTRA-SIMPLE ====================
 
 let isFullscreen = false;
+let fullscreenOriginalState = null;
 
 function toggleFullscreen() {
     if (!isFullscreen) {
-        // Passer en mode plein écran
         enterFullscreenMode();
     } else {
-        // Sortir du mode plein écran
         exitFullscreenMode();
     }
 }
 
 function enterFullscreenMode() {
-    // Sauvegarder l'état actuel AVANT toute modification
+    console.log('📺 Entrée en mode plein écran - AUCUNE modification du fond de carte');
+    
+    // VÉRIFICATION : État du fond AVANT le plein écran
+    const osmOpacityBefore = osmLayer ? osmLayer.options.opacity : 'undefined';
+    const backgroundStateBefore = backgroundHidden;
+    console.log('🔍 AVANT plein écran - OSM opacity:', osmOpacityBefore, 'backgroundHidden:', backgroundStateBefore);
+    
+    // Sauvegarder UNIQUEMENT les éléments visuels
     const sidebar = document.getElementById('sidebar');
     const controls = document.querySelector('.absolute.top-4.left-4');
+    const mapParent = document.getElementById('map').parentElement;
     
-    window.fullscreenState = {
+    fullscreenOriginalState = {
         sidebarDisplay: sidebar.style.display,
         controlsDisplay: controls.style.display,
-        mapContainerClass: document.getElementById('map').parentElement.className,
-        sidebarHidden: sidebarHidden,
-        backgroundHidden: backgroundHidden,
-        osmOpacity: osmLayer ? osmLayer.options.opacity : 0.4
+        mapParentClass: mapParent.className
     };
     
-    console.log('💾 État sauvegardé:', window.fullscreenState);
-    
-    // Masquer les éléments pour le plein écran
+    // Modifications UNIQUEMENT visuelles
     sidebar.style.display = 'none';
     controls.style.display = 'none';
+    mapParent.className = 'fixed inset-0 z-50';
+    document.getElementById('map').className = 'w-full h-full';
     
-    // Mettre la carte en plein écran
-    const mapContainer = document.getElementById('map');
-    mapContainer.parentElement.className = 'fixed inset-0 z-50';
-    mapContainer.className = 'w-full h-full';
+    // Bouton de sortie
+    const exitBtn = document.createElement('button');
+    exitBtn.id = 'fullscreen-exit';
+    exitBtn.innerHTML = '❌ Sortir';
+    exitBtn.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow hover:bg-red-700 z-[1001]';
+    exitBtn.onclick = exitFullscreenMode;
+    document.body.appendChild(exitBtn);
     
-    // Ajouter un bouton de sortie
-    const exitButton = document.createElement('button');
-    exitButton.id = 'exit-fullscreen';
-    exitButton.innerHTML = '❌ Sortir du plein écran';
-    exitButton.className = 'fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow hover:bg-red-700 z-[1001]';
-    exitButton.onclick = exitFullscreenMode;
-    document.body.appendChild(exitButton);
+    // Redimensionner la carte
+    setTimeout(() => map.invalidateSize(), 100);
     
-    // Recalculer la carte
+    // VÉRIFICATION : État du fond APRÈS le plein écran
     setTimeout(() => {
-        map.invalidateSize();
-    }, 100);
+        const osmOpacityAfter = osmLayer ? osmLayer.options.opacity : 'undefined';
+        const backgroundStateAfter = backgroundHidden;
+        console.log('🔍 APRÈS plein écran - OSM opacity:', osmOpacityAfter, 'backgroundHidden:', backgroundStateAfter);
+        
+        if (osmOpacityBefore !== osmOpacityAfter || backgroundStateBefore !== backgroundStateAfter) {
+            console.error('❌ PROBLÈME : Le fond de carte a été modifié !');
+        } else {
+            console.log('✅ OK : Le fond de carte n\'a pas été modifié');
+        }
+    }, 200);
     
     isFullscreen = true;
-    console.log('📺 Mode plein écran activé - Fond de carte préservé');
 }
 
 function exitFullscreenMode() {
-    if (!window.fullscreenState) return;
+    if (!fullscreenOriginalState) return;
     
-    console.log('🔄 Restauration de l\'état:', window.fullscreenState);
+    console.log('📺 Sortie du mode plein écran - Restauration interface uniquement');
     
-    // Restaurer EXACTEMENT l'état précédent
+    // Restaurer UNIQUEMENT l'affichage
     const sidebar = document.getElementById('sidebar');
     const controls = document.querySelector('.absolute.top-4.left-4');
-    const mapContainer = document.getElementById('map');
+    const mapParent = document.getElementById('map').parentElement;
     
-    // Restaurer l'affichage
-    sidebar.style.display = window.fullscreenState.sidebarDisplay;
-    controls.style.display = window.fullscreenState.controlsDisplay;
-    mapContainer.parentElement.className = window.fullscreenState.mapContainerClass;
-    mapContainer.className = 'h-full';
-    
-    // Restaurer les variables d'état
-    sidebarHidden = window.fullscreenState.sidebarHidden;
-    backgroundHidden = window.fullscreenState.backgroundHidden;
-    
-    // Restaurer l'opacité du fond de carte
-    if (osmLayer) {
-        osmLayer.setOpacity(window.fullscreenState.osmOpacity);
-    }
-    
-    // Restaurer l'état du bouton de fond
-    if (backgroundHidden) {
-        toggleBackgroundButton.textContent = 'Afficher Fond';
-        toggleBackgroundButton.className = 'bg-amber-600 text-white px-4 py-2 rounded-lg shadow hover:bg-amber-700 transform hover:scale-105 transition-all duration-200';
-    } else {
-        toggleBackgroundButton.textContent = 'Masquer Fond';
-        toggleBackgroundButton.className = 'bg-indigo-600 text-white px-4 py-2 rounded-lg shadow hover:bg-indigo-700 transform hover:scale-105 transition-all duration-200';
-    }
-    
-    // Restaurer l'état du bouton sidebar
-    if (sidebarHidden) {
-        toggleSidebarButton.textContent = 'Afficher Menu';
-        toggleSidebarButton.className = 'bg-orange-600 text-white px-4 py-2 rounded-lg shadow hover:bg-orange-700 transform hover:scale-105 transition-all duration-200';
-    } else {
-        toggleSidebarButton.textContent = 'Masquer Menu';
-        toggleSidebarButton.className = 'bg-purple-600 text-white px-4 py-2 rounded-lg shadow hover:bg-purple-700 transform hover:scale-105 transition-all duration-200';
-    }
+    sidebar.style.display = fullscreenOriginalState.sidebarDisplay;
+    controls.style.display = fullscreenOriginalState.controlsDisplay;
+    mapParent.className = fullscreenOriginalState.mapParentClass;
+    document.getElementById('map').className = 'h-full';
     
     // Supprimer le bouton de sortie
-    const exitButton = document.getElementById('exit-fullscreen');
-    if (exitButton) {
-        document.body.removeChild(exitButton);
-    }
+    const exitBtn = document.getElementById('fullscreen-exit');
+    if (exitBtn) document.body.removeChild(exitBtn);
     
-    // Recalculer la carte
-    setTimeout(() => {
-        map.invalidateSize();
-    }, 100);
+    // Redimensionner la carte
+    setTimeout(() => map.invalidateSize(), 100);
     
     isFullscreen = false;
-    console.log('📺 Mode plein écran désactivé - État complètement restauré');
+    fullscreenOriginalState = null;
 }
 
 fullscreenButton.addEventListener('click', toggleFullscreen);
