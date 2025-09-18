@@ -5,9 +5,32 @@ let map = L.map('map', {
     zoomAnimation: false
 }).setView([46.603354, 1.888334], 6);
 
-const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap | Données IGN/INSEE'
+// Option 1: OpenStreetMap optimisé
+// const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+//     attribution: '© OpenStreetMap | Données IGN/INSEE',
+//     maxZoom: 16,
+//     minZoom: 5,
+//     updateWhenZooming: false,
+//     updateWhenIdle: true
+// });
+
+// Option 2: CartoDB Positron (plus léger, style minimaliste) - ACTIF
+const tileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CartoDB | Données IGN/INSEE',
+    maxZoom: 16,
+    minZoom: 5,
+    updateWhenZooming: false,
+    updateWhenIdle: true
 });
+
+// Option 3: Stamen Toner Lite (très minimaliste, ultra-rapide)
+// const tileLayer = L.tileLayer('https://stamen-tiles.a.ssl.fastly.net/toner-lite/{z}/{x}/{y}.png', {
+//     attribution: '© Stamen Design © OpenStreetMap | Données IGN/INSEE',
+//     maxZoom: 16,
+//     minZoom: 5,
+//     updateWhenZooming: false,
+//     updateWhenIdle: true
+// });
 tileLayer.addTo(map);
 
 let currentLayer = null;
@@ -473,8 +496,17 @@ function findPointInside(bounds, feature) {
     return bounds.getCenter();
 }
 
-infoDiv.innerText = 'Niveau actuel : Chargement...';
+infoDiv.innerHTML = '<div class="flex items-center space-x-2"><div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div><span>Niveau actuel : Chargement des données...</span></div>';
 loadingDiv.style.display = 'block';
+loadingDiv.innerHTML = `
+    <div class="flex items-center space-x-3 text-blue-600">
+        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+        <div>
+            <div class="font-medium">Chargement en cours...</div>
+            <div class="text-sm text-gray-500">Préparation des données géographiques</div>
+        </div>
+    </div>
+`;
 
 // Fonction pour charger et parser le CSV
 function loadCSV(url) {
@@ -497,11 +529,42 @@ function loadCSV(url) {
         });
 }
 
-// Charge les fichiers GeoJSON et CSV
+// Charge les fichiers GeoJSON et CSV avec indicateurs de progression
+let loadingStep = 0;
+const totalSteps = 3;
+
+function updateLoadingProgress(step, message) {
+    loadingStep = step;
+    const progress = Math.round((step / totalSteps) * 100);
+    loadingDiv.innerHTML = `
+        <div class="space-y-3">
+            <div class="flex items-center space-x-3 text-blue-600">
+                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                <div>
+                    <div class="font-medium">${message}</div>
+                    <div class="text-sm text-gray-500">Étape ${step}/${totalSteps}</div>
+                </div>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: ${progress}%"></div>
+            </div>
+        </div>
+    `;
+}
+
 Promise.all([
-    fetch('data/departements.geojson').then(res => res.json()),
-    fetch('data/communes.geojson').then(res => res.json()),
-    loadCSV('data/iris_grd_quartier.csv')
+    fetch('data/departements.geojson').then(res => {
+        updateLoadingProgress(1, 'Chargement des départements...');
+        return res.json();
+    }),
+    fetch('data/communes.geojson').then(res => {
+        updateLoadingProgress(2, 'Chargement des communes...');
+        return res.json();
+    }),
+    loadCSV('data/iris_grd_quartier.csv').then(data => {
+        updateLoadingProgress(3, 'Chargement des correspondances IRIS...');
+        return data;
+    })
 ])
     .then(([depts, communes, irisGQ]) => {
         departementsData = depts;
@@ -512,13 +575,43 @@ Promise.all([
         console.log('Correspondances IRIS-GQ chargées :', Object.keys(irisGrandQuartierMap).length);
         console.log('Exemple de properties départements :', departementsData.features[0].properties);
         console.log('Exemple de properties communes :', communesData.features[0].properties);
-        showLevel(currentLevel);
-        loadingDiv.style.display = 'none';
+        
+        // Animation de succès
+        loadingDiv.innerHTML = `
+            <div class="flex items-center space-x-3 text-green-600">
+                <div class="rounded-full h-5 w-5 bg-green-600 flex items-center justify-center">
+                    <svg class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <div>
+                    <div class="font-medium">Données chargées avec succès !</div>
+                    <div class="text-sm text-gray-500">Initialisation de la carte...</div>
+                </div>
+            </div>
+        `;
+        
+        setTimeout(() => {
+            showLevel(currentLevel);
+            loadingDiv.style.display = 'none';
+        }, 800);
     })
     .catch(err => {
         console.error('Erreur chargement des données GeoJSON :', err);
-        infoDiv.innerText = `Erreur de chargement : ${err.message}. Vérifiez la console.`;
-        loadingDiv.style.display = 'none';
+        loadingDiv.innerHTML = `
+            <div class="flex items-center space-x-3 text-red-600">
+                <div class="rounded-full h-5 w-5 bg-red-600 flex items-center justify-center">
+                    <svg class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </div>
+                <div>
+                    <div class="font-medium">Erreur de chargement</div>
+                    <div class="text-sm text-gray-500">${err.message}</div>
+                </div>
+            </div>
+        `;
+        infoDiv.innerHTML = `<div class="text-red-600">Erreur de chargement. Vérifiez la console.</div>`;
     });
 
 function showLevel(level, filterCode = null) {
@@ -687,9 +780,26 @@ function drillDown(feature, level) {
         const communeCode = feature.properties.code;
         const depCode = communeCode.slice(0, 2);
         
+        // Afficher un indicateur de chargement spécifique pour les IRIS
+        loadingDiv.style.display = 'block';
+        loadingDiv.innerHTML = `
+            <div class="flex items-center space-x-3 text-indigo-600">
+                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+                <div>
+                    <div class="font-medium">🗺️ Chargement des IRIS</div>
+                    <div class="text-sm text-gray-500">Commune: ${feature.properties.nom}</div>
+                    <div class="text-xs text-gray-400">Analyse des grands quartiers...</div>
+                </div>
+            </div>
+        `;
+        
         fetch(`data/iris_par_departement/iris_${depCode}.geojson`)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return res.json();
+            })
             .then(irisData => {
+                loadingDiv.style.display = 'none';
                 const irisFeatures = irisData.features.filter(f => f.properties.code_insee === communeCode);
                 if (irisFeatures.length === 0) {
                     alert('Aucune donnée IRIS pour cette commune.');
