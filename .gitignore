@@ -1,0 +1,19 @@
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers temporaires
+*.tmp
+*.log
+
+# Dossiers de cache
+node_modules/
+.cache/
+
+# Fichiers d'environnement (si vous en ajoutez plus tard)
+.env
+.env.local
+
+# Fichiers de sauvegarde
+*.bak
+*~

@@ -1,0 +1,221 @@
+/* Styles pour la carte */
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+/* Style des popups Leaflet */
+.leaflet-popup-content-wrapper {
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    padding: 12px;
+}
+
+.leaflet-popup-content {
+    font-family: 'Arial', sans-serif;
+    font-size: 14px;
+    color: #333;
+    line-height: 1.5;
+}
+
+.leaflet-popup-tip {
+    background-color: #ffffff;
+}
+
+/* Style des tooltips Leaflet */
+.leaflet-tooltip {
+    background-color: #2d3748;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+    transition: opacity 0.2s ease-in-out;
+}
+
+/* Tooltip spéciale pour les communes avec grands quartiers */
+.leaflet-tooltip.commune-enhanced {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    max-width: 250px;
+    line-height: 1.4;
+}
+
+.leaflet-tooltip.commune-enhanced .tooltip-title {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 4px;
+    border-bottom: 1px solid rgba(255,255,255,0.3);
+    padding-bottom: 4px;
+}
+
+.leaflet-tooltip.commune-enhanced .tooltip-info {
+    font-size: 13px;
+    opacity: 0.95;
+}
+
+.leaflet-tooltip::before {
+    border-top-color: #2d3748;
+}
+
+.leaflet-tooltip.commune-enhanced::before {
+    border-top-color: #667eea;
+}
+
+/* Style du panneau latéral */
+#sidebar {
+    border-right: 1px solid #e2e8f0;
+    max-height: 100vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+#sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+#sidebar::-webkit-scrollbar-track {
+    background: #f7fafc;
+}
+
+#sidebar::-webkit-scrollbar-thumb {
+    background-color: #cbd5e0;
+    border-radius: 4px;
+}
+
+#sidebar::-webkit-scrollbar-thumb:hover {
+    background-color: #a0aec0;
+}
+
+/* Style pour les éléments details/summary */
+details summary {
+    user-select: none;
+    cursor: pointer;
+}
+
+details summary:hover {
+    color: #2b6cb0;
+}
+
+details[open] summary {
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+/* Style du chargement */
+#loading {
+    z-index: 1000;
+}
+
+/* Animation pour les boutons */
+button {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Styles pour l'affichage hiérarchique des grands quartiers */
+.gq-container {
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+}
+
+.gq-header {
+    padding: 0.75rem 1rem;
+    background: linear-gradient(to right, #f3f4f6, #ffffff);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: all 0.2s;
+}
+
+.gq-header:hover {
+    background: linear-gradient(to right, #e5e7eb, #f9fafb);
+}
+
+.gq-header.expanded {
+    background: linear-gradient(to right, #ddd6fe, #f3f4f6);
+}
+
+.gq-color-indicator {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    margin-right: 12px;
+    border: 2px solid rgba(0,0,0,0.1);
+}
+
+.gq-content {
+    padding: 0.5rem 1rem 1rem 1rem;
+    background: #fafafa;
+}
+
+.iris-item {
+    padding: 0.5rem 0.75rem;
+    margin: 0.25rem 0;
+    background: white;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+    min-height: auto;
+    word-wrap: break-word;
+}
+
+.iris-item:hover {
+    background: #f3f4f6;
+    border-left-color: #6366f1;
+    transform: translateX(2px);
+}
+
+/* Style pour les labels d'IRIS sur la carte */
+.iris-label, .iris-label-export {
+    background: none !important;
+    border: none !important;
+    font-family: Arial, sans-serif;
+}
+
+.iris-label div, .iris-label-export div {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Style pour le mode export */
+.export-container {
+    background: white;
+    padding: 2rem;
+    margin: 2rem auto;
+    max-width: 1200px;
+}
+
+.export-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.export-content {
+    display: flex;
+    gap: 2rem;
+}
+
+.export-map {
+    flex: 2;
+    min-height: 600px;
+}
+
+.export-legend {
+    flex: 1;
+    background: #f9fafb;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+}

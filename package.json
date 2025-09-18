@@ -1,0 +1,13 @@
+{
+  "name": "carte-interactive-iris",
+  "version": "1.0.0",
+  "description": "Application de visualisation interactive des IRIS avec grands quartiers",
+  "main": "index.html",
+  "scripts": {
+    "dev": "python -m http.server 3000",
+    "start": "python -m http.server 8000"
+  },
+  "keywords": ["carte", "iris", "geojson", "leaflet", "france"],
+  "author": "Votre nom",
+  "license": "MIT"
+}
